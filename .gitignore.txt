@@ -1,0 +1,6 @@
+node_modules/
+build/
+out/
+lib/
+*.class
+src/main/resources/db.properties

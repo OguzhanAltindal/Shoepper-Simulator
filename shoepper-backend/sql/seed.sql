@@ -3,7 +3,7 @@
 -- Run after schema.sql
 -- ============================================================
 
-USE shoepper;
+USE shoepper_simulator_db;
 
 -- Shops
 INSERT IGNORE INTO Shop (shop_name, attraction_rate, rent, recognition) VALUES

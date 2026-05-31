@@ -1,10 +1,6 @@
--- ============================================================
--- Shoepper Simulator - Database Schema
--- MySQL 8.0+
--- ============================================================
 
-CREATE DATABASE IF NOT EXISTS shoepper;
-USE shoepper;
+CREATE DATABASE IF NOT EXISTS shoepper_simulator_db;
+USE shoepper_simulator_db;
 
 -- Player
 CREATE TABLE IF NOT EXISTS Player (

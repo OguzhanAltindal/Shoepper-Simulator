@@ -13,19 +13,19 @@ import java.util.Random;
 public class CustomerRepository {
 
     private static final String[] CUSTOMER_NAMES = {
-        "Mahmud","Bülent","Ali","Emre","Berke","Ahmet","Zeynep","Selin",
-        "Kemal","Tarık","Fatma","Hasan","Murat","Gökhan","Deniz","Caner"
+            "Mahmud", "Bülent", "Ali", "Emre", "Berke", "Ahmet", "Zeynep", "Selin",
+            "Kemal", "Tarık", "Fatma", "Hasan", "Murat", "Gökhan", "Deniz", "Caner"
     };
 
     private static final int[][] ITEM_BASE_PRICES = {
-        {1, 100}, {2, 200}, {3, 350}, {4, 50}, {5, 250}
+            { 1, 100 }, { 2, 200 }, { 3, 350 }, { 4, 50 }, { 5, 250 }
     };
 
     private final Random rng = new Random();
 
     /** Generates and inserts daily customers for a shop, returns list */
     public List<Customer> generateDailyCustomers(int playerId, String shopName,
-                                                  double attractionRate, int recognition) throws SQLException {
+            double attractionRate, int recognition) throws SQLException {
         // Delete previous customers for this shop
         clearCustomers(shopName);
 
@@ -37,7 +37,7 @@ public class CustomerRepository {
             try (PreparedStatement ps = conn.prepareStatement(ins)) {
                 for (int i = 0; i < count; i++) {
                     String name = CUSTOMER_NAMES[rng.nextInt(CUSTOMER_NAMES.length)] + "_" + (i + 1);
-                    int greed    = Math.min(10, rng.nextInt(6) + recognition);
+                    int greed = Math.min(10, rng.nextInt(6) + recognition);
                     int patience = Math.max(1, rng.nextInt(8) - recognition / 3);
                     ps.setString(1, shopName);
                     ps.setString(2, name);
@@ -63,8 +63,8 @@ public class CustomerRepository {
     /** Removes customer record after trade is complete */
     public void removeCustomer(String shopName, String customerName) throws SQLException {
         try (Connection conn = Database.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                "DELETE FROM Customer WHERE shop_name = ? AND customer_name = ?")) {
+                PreparedStatement ps = conn.prepareStatement(
+                        "DELETE FROM Customer WHERE shop_name = ? AND customer_name = ?")) {
             ps.setString(1, shopName);
             ps.setString(2, customerName);
             ps.executeUpdate();
@@ -73,8 +73,8 @@ public class CustomerRepository {
 
     public void clearCustomers(String shopName) throws SQLException {
         try (Connection conn = Database.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                "DELETE FROM Customer WHERE shop_name = ?")) {
+                PreparedStatement ps = conn.prepareStatement(
+                        "DELETE FROM Customer WHERE shop_name = ?")) {
             ps.setString(1, shopName);
             ps.executeUpdate();
         }

@@ -293,7 +293,7 @@ public class PlayerRepository {
 
         // Items with full join
         List<ItemInfo> items = new ArrayList<>();
-        String itemSql = "SELECT ii.item_id, ii.inventory_id, ii.player_id, ii.amount, " +
+        String itemSql = "SELECT ii.instance_id, ii.item_id, ii.inventory_id, ii.player_id, ii.amount, " +
                 "ii.`condition`, ii.is_replica, ii.rarity, " +
                 "ir.item_name, ir.craft_ingredient, ir.craft_time, ir.repair_ingredient, ir.repair_time, " +
                 "b.brand_name, b.brand_multiplier, " +
@@ -320,6 +320,7 @@ public class PlayerRepository {
 
     private ItemInfo mapItemInfo(ResultSet rs) throws SQLException {
         ItemInfo item = new ItemInfo();
+        item.setInstanceId(rs.getInt("instance_id"));
         item.setItemId(rs.getInt("item_id"));
         item.setInventoryId(rs.getInt("inventory_id"));
         item.setPlayerId(rs.getInt("player_id"));
@@ -351,6 +352,21 @@ public class PlayerRepository {
     }
 
     // ─── UPDATE ───────────────────────────────────────────────
+
+    /**
+     * Permanently removes a player and all owned data. The schema declares
+     * ON DELETE CASCADE from Player down through PlayerStats, PlayerHasSkills,
+     * PlayerOwnsShop and Inventory (which in turn cascades to PlayerInventory,
+     * ShopInventory, ResourceInInventory and ItemInfo), so deleting the Player
+     * row is enough to clear everything the player owns.
+     */
+    public void deletePlayer(int playerId) throws SQLException {
+        try (Connection conn = Database.getConnection();
+                PreparedStatement ps = conn.prepareStatement("DELETE FROM Player WHERE player_id = ?")) {
+            ps.setInt(1, playerId);
+            ps.executeUpdate();
+        }
+    }
 
     public void updateBudget(int playerId, double newBudget) throws SQLException {
         try (Connection conn = Database.getConnection();

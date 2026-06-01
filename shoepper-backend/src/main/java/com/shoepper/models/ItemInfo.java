@@ -1,6 +1,7 @@
 package com.shoepper.models;
 
 public class ItemInfo {
+    private int instanceId;   // unique per physical item row (AUTO_INCREMENT PK)
     private int itemId;
     private int inventoryId;
     private int playerId;
@@ -24,6 +25,8 @@ public class ItemInfo {
 
     public ItemInfo() {}
 
+    public int getInstanceId()               { return instanceId; }
+    public void setInstanceId(int v)         { this.instanceId = v; }
     public int getItemId()                   { return itemId; }
     public void setItemId(int v)             { this.itemId = v; }
     public int getInventoryId()              { return inventoryId; }

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGame } from '../context/GameContext';
-import { startGathering, startCrafting } from '../services/api';
+import { startGathering, startCrafting, startRepair } from '../services/api';
 import { RESOURCE_TYPES, ITEM_RELATIONS } from '../data/mockData';
 
 export default function SkillsPanel() {
@@ -12,65 +12,115 @@ export default function SkillsPanel() {
     const alreadyGathering = player.activeTasks.some(t => t.type === 'gathering' && t.resource_name === resourceName);
     if (alreadyGathering) { notify('Already gathering that!', 'error'); return; }
     const updated = await startGathering(player, resourceName);
+    if (updated.error) { notify(updated.error, 'error'); return; }
     dispatch({ type: 'SET_PLAYER', payload: updated });
     notify(`Started gathering ${resourceName}...`, 'info');
   };
 
   const handleCraft = async (itemId) => {
     const relation = ITEM_RELATIONS.find(r => r.item_id === itemId);
-    const hasIngredient = player.playerInventory.resources.find(r => r.resource_name === relation?.craft_ingredient && r.amount > 0);
+    const hasIngredient = player.playerInventory.resources.find(
+      r => r.resource_name === relation?.craft_ingredient && r.amount > 0
+    );
     if (!hasIngredient) { notify(`Need ${relation?.craft_ingredient}!`, 'error'); return; }
     const updated = await startCrafting(player, itemId);
+    if (updated.error) { notify(updated.error, 'error'); return; }
     dispatch({ type: 'SET_PLAYER', payload: updated });
-    notify(`Crafting ${relation.item_name}...`, 'info');
+    notify(`Crafted ${relation.item_name}!`, 'success');
   };
+
+  const handleRepairFromSkills = async (item, fromInventory) => {
+    const relation = ITEM_RELATIONS.find(r => r.item_id === item.item_id);
+    const needed = relation?.repair_ingredient;
+    const hasResource = player.playerInventory.resources.find(r => r.resource_name === needed && r.amount > 0);
+    if (!hasResource) { notify(`Need ${needed || 'repair resource'}!`, 'error'); return; }
+    const updated = await startRepair(player, item, fromInventory);
+    if (updated.error) { notify(updated.error, 'error'); return; }
+    dispatch({ type: 'SET_PLAYER', payload: updated });
+    notify(`${item.item_name} repaired!`, 'success');
+  };
+
+  const damagedPlayerItems = (player.playerInventory.items || []).filter(i => i.condition < 100);
+  const damagedShopItems   = (player.shopInventory.items || []).filter(i => i.condition < 100);
 
   return (
     <div style={styles.panel}>
-      {/* Stats */}
-      <Section title="📊 Stats">
+
+      <Section title="📊 Stats" defaultOpen>
         {player.stats.map(stat => (
           <StatRow key={stat.stat_name} stat={stat} />
         ))}
       </Section>
 
-      {/* Skills */}
-      <Section title="⚒️ Skills">
+      <Section title="⚒️ Skills" defaultOpen>
         {player.skills.map(skill => (
           <SkillRow key={skill.skill_name} skill={skill} />
         ))}
       </Section>
 
-      {/* Gather */}
-      <Section title="🪨 Gather Resources">
-        {RESOURCE_TYPES.map(rt => (
-          <ActionRow
-            key={rt.resource_name}
-            label={rt.resource_name}
-            sub={`${rt.gather_time}s · +${rt.gather_exp} exp`}
-            onAction={() => handleGather(rt.resource_name)}
-            actionLabel="Gather"
-            disabled={player.activeTasks.some(t => t.resource_name === rt.resource_name)}
-          />
-        ))}
+      <Section title="🪨 Gather Resources" defaultOpen>
+        {RESOURCE_TYPES.map(rt => {
+          const busy = player.activeTasks.some(t => t.resource_name === rt.resource_name);
+          return (
+            <ActionRow
+              key={rt.resource_name}
+              label={rt.resource_name}
+              sub={`⏱ ${rt.gather_time}s · +${rt.gather_exp} exp`}
+              onAction={() => handleGather(rt.resource_name)}
+              actionLabel="Gather"
+              disabled={busy}
+            />
+          );
+        })}
       </Section>
 
-      {/* Craft */}
       <Section title="🔨 Craft Items">
-        {ITEM_RELATIONS.map(ir => (
-          <ActionRow
-            key={ir.item_id}
-            label={ir.item_name}
-            sub={`Needs: ${ir.craft_ingredient}`}
-            onAction={() => handleCraft(ir.item_id)}
-            actionLabel="Craft"
-          />
-        ))}
+        {ITEM_RELATIONS.map(ir => {
+          const hasIngredient = player.playerInventory.resources.find(
+            r => r.resource_name === ir.craft_ingredient && r.amount > 0
+          );
+          return (
+            <ActionRow
+              key={ir.item_id}
+              label={ir.item_name}
+              sub={`Needs: ${ir.craft_ingredient} · ⏱ ${ir.craft_time}s`}
+              onAction={() => handleCraft(ir.item_id)}
+              actionLabel="Craft"
+              disabled={!hasIngredient}
+            />
+          );
+        })}
       </Section>
 
-      {/* Active Tasks */}
+      <Section title="🔧 Repair Items">
+        {damagedPlayerItems.length === 0 && damagedShopItems.length === 0 ? (
+          <div style={styles.noRepair}>No damaged items.</div>
+        ) : (
+          <>
+            {damagedPlayerItems.map((item, i) => (
+              <ActionRow
+                key={`p-${i}`}
+                label={`${item.item_name} (Bag)`}
+                sub={`Condition: ${item.condition}/100 · Needs: ${ITEM_RELATIONS.find(r => r.item_id === item.item_id)?.repair_ingredient || '?'}`}
+                onAction={() => handleRepairFromSkills(item, 'player')}
+                actionLabel="🔧"
+              />
+            ))}
+            {damagedShopItems.map((item, i) => (
+              <ActionRow
+                key={`s-${i}`}
+                label={`${item.item_name} (Shop)`}
+                sub={`Condition: ${item.condition}/100 · Needs: ${ITEM_RELATIONS.find(r => r.item_id === item.item_id)?.repair_ingredient || '?'}`}
+                onAction={() => handleRepairFromSkills(item, 'shop')}
+                actionLabel="🔧"
+              />
+            ))}
+          </>
+        )}
+      </Section>
+
       {player.activeTasks.length > 0 && (
-        <Section title="⏳ Active Tasks">
+        <Section title="⏳ Active Tasks" defaultOpen>
           {player.activeTasks.map(task => (
             <TaskRow key={task.id} task={task} />
           ))}
@@ -80,8 +130,8 @@ export default function SkillsPanel() {
   );
 }
 
-function Section({ title, children }) {
-  const [open, setOpen] = React.useState(true);
+function Section({ title, children, defaultOpen = false }) {
+  const [open, setOpen] = React.useState(defaultOpen);
   return (
     <div style={styles.section}>
       <div style={styles.sectionHeader} onClick={() => setOpen(o => !o)}>
@@ -100,7 +150,7 @@ function StatRow({ stat }) {
       <div style={styles.rowMain}>
         <div style={styles.rowName}>{stat.stat_name}</div>
         <div style={styles.expBar}>
-          <div style={{ width: `${stat.stat_level}%`, background: '#6C8EF5', height: '100%', borderRadius: 4 }} />
+          <div style={{ width: `${Math.min(stat.stat_level, 100)}%`, background: '#6C8EF5', height: '100%', borderRadius: 4 }} />
         </div>
       </div>
       <div style={styles.rowRight}>
@@ -112,7 +162,7 @@ function StatRow({ stat }) {
 }
 
 function SkillRow({ skill }) {
-  const expPct = (skill.exp / skill.exp_needed) * 100;
+  const expPct = Math.min(100, (skill.exp / skill.exp_needed) * 100);
   return (
     <div style={styles.row}>
       <div style={styles.rowMain}>
@@ -134,14 +184,14 @@ function ActionRow({ label, sub, onAction, actionLabel, disabled }) {
     <div style={styles.row}>
       <div style={styles.rowMain}>
         <div style={styles.rowName}>{label}</div>
-        <div style={styles.rowSub}>{sub}</div>
+        {sub && <div style={styles.rowSub}>{sub}</div>}
       </div>
       <button
         style={{ ...styles.actionBtn, opacity: disabled ? 0.4 : 1 }}
         onClick={onAction}
         disabled={disabled}
       >
-        {disabled ? '...' : actionLabel}
+        {disabled ? '…' : actionLabel}
       </button>
     </div>
   );
@@ -177,7 +227,6 @@ const styles = {
     background: '#181C27', border: '1px solid #252A3A',
     borderRadius: 16, padding: 12,
     display: 'flex', flexDirection: 'column', gap: 8,
-    overflowY: 'auto',
   },
   section: { display: 'flex', flexDirection: 'column', gap: 6 },
   sectionHeader: {
@@ -206,4 +255,5 @@ const styles = {
     cursor: 'pointer', flexShrink: 0,
     fontFamily: "'DM Sans', sans-serif",
   },
+  noRepair: { fontSize: 12, color: '#8890A4', fontStyle: 'italic', padding: '6px 0' },
 };

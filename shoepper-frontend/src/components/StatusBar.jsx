@@ -1,6 +1,7 @@
 import React from 'react';
 import { useGame } from '../context/GameContext';
 import { advanceDay } from '../services/api';
+import { generateCustomer } from '../data/mockData';
 
 export default function StatusBar() {
   const { state, dispatch, notify } = useGame();
@@ -11,21 +12,52 @@ export default function StatusBar() {
 
   const handleNextDay = async () => {
     const updated = await advanceDay(player);
+    if (updated.error) { notify(updated.error, 'error'); return; }
     dispatch({ type: 'SET_PLAYER', payload: updated });
-    dispatch({ type: 'SET_CUSTOMERS', payload: updated.customers || [] });
+
+    // Backend customers may lack offeredItem/wantsToBuy/mood — augment them
+    const shopItems = updated.shopInventory?.items || [];
+    const rawCustomers = updated.customers || [];
+    const customers = rawCustomers.length > 0
+      ? rawCustomers.map(c => {
+          // If backend customer already has offeredItem and wantsToBuy, keep it
+          if (c.offeredItem && c.offeredItem.item_name) return c;
+          // Otherwise generate the missing fields
+          const generated = generateCustomer(updated.shop?.recognition ?? 3, shopItems);
+          return {
+            ...generated,
+            _id: c._id || generated._id,
+            customer_name: c.customer_name || generated.customer_name,
+            patience: c.patience || generated.patience,
+            greed: c.greed || generated.greed,
+          };
+        })
+      // If backend returns no customers, generate based on attraction rate
+      : Array.from(
+          { length: Math.max(1, Math.round(updated.shop?.attraction_rate ?? 1)) },
+          () => generateCustomer(updated.shop?.recognition ?? 3, shopItems)
+        );
+
+    dispatch({ type: 'SET_CUSTOMERS', payload: customers });
+    dispatch({ type: 'SET_TAB', payload: 'customers' });
+
     if (updated.gameOver) {
       dispatch({ type: 'SET_SCREEN', payload: 'gameover' });
     } else if (updated.daysUntilRent === 7 && updated.week > player.week) {
-      notify(`Week ${updated.week} — Rent of $${player.shop.rent.toLocaleString()} paid!`, 'info');
+      dispatch({ type: 'SET_RENT_EVENT', payload: {
+        week: updated.week,
+        amount: player.shop?.rent ?? 0,
+        budgetAfter: updated.budget,
+      }});
     } else {
-      notify(`Day ${updated.day} begins. ${updated.customers?.length || 0} customers incoming.`, 'info');
+      notify(`Day ${updated.day} begins. ${customers.length} customer${customers.length !== 1 ? 's' : ''} incoming.`, 'info');
     }
   };
 
   return (
     <div style={styles.bar}>
       <div style={styles.left}>
-        <div style={styles.shopName}>{player.shop.shop_name}</div>
+        <div style={styles.shopName}>{player.shop?.shop_name}</div>
         <div style={styles.playerName}>👤 {player.nickname}</div>
       </div>
 
@@ -41,7 +73,7 @@ export default function StatusBar() {
           label="Rent due"
           value={`${player.daysUntilRent}d`}
           danger={rentDanger}
-          sub={`$${player.shop.rent.toLocaleString()}`}
+          sub={`$${(player.shop?.rent ?? 0).toLocaleString()}`}
         />
       </div>
 

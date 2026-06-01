@@ -1,40 +1,36 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useGame } from '../context/GameContext';
 import { calcItemPrice, processTransaction } from '../services/api';
-import { BRANDED_ITEMS, SPECIAL_EDITION_ITEMS, SIGNED_ITEMS } from '../data/mockData';
+import { BRANDED_ITEMS, SPECIAL_EDITION_ITEMS, SIGNED_ITEMS, ITEM_RELATIONS } from '../data/mockData';
 
 export default function TradeModal() {
-  const { state, dispatch, notify } = useGame();
+  const { state, dispatch, customerNotify } = useGame();
   const { selectedCustomer: customer, player } = state;
 
-  // ============ HOOKS (must be unconditional, before early returns) ============
-
-  // For SELL: player picks a shop item; for BUY: customer's offered item is the trade item
   const [selectedShopItemIdx, setSelectedShopItemIdx] = useState(0);
 
-  // Keep idx in bounds when shop inventory changes
   useEffect(() => {
     const len = player?.shopInventory.items.length || 0;
-    if (selectedShopItemIdx >= len && len > 0) {
-      setSelectedShopItemIdx(0);
-    }
+    if (selectedShopItemIdx >= len && len > 0) setSelectedShopItemIdx(0);
   }, [player?.shopInventory.items.length, selectedShopItemIdx]);
 
-  // The item being traded
   const tradedItem = customer
     ? customer.wantsToBuy
       ? player?.shopInventory.items[selectedShopItemIdx] || null
       : customer.offeredItem
     : null;
 
-  const truePrice = useMemo(
+  const qty = tradedItem?.amount || 1;
+
+  const unitPrice = useMemo(
     () => (tradedItem ? calcItemPrice(tradedItem, tradedItem) : 0),
     [tradedItem?.item_id, tradedItem?.condition, tradedItem?.is_replica]
   );
 
+  const truePrice = unitPrice * qty;
+
   const intelligenceLv = player?.stats.find(s => s.stat_name === 'intelligence')?.stat_level || 1;
 
-  // Estimated price - error decreases with intelligence (memoized so it doesn't re-randomize)
   const estimatedPrice = useMemo(() => {
     if (!truePrice) return 0;
     const error = Math.max(0, (10 - intelligenceLv) * 0.08);
@@ -50,29 +46,24 @@ export default function TradeModal() {
   const [round, setRound] = useState(0);
   const [customerOffer, setCustomerOffer] = useState(0);
 
-  // Initialize trade when customer/item changes
   useEffect(() => {
     if (!customer || !tradedItem) return;
     setPatienceLeft(customer.patience);
     setRound(0);
 
     if (customer.wantsToBuy) {
-      // Customer offers low (their initial bid)
       const initial = Math.round(truePrice * (0.6 - customer.greed * 0.03));
       setCustomerOffer(Math.max(minOffer, initial));
       setYourOffer(Math.round(truePrice * 1.1));
     } else {
-      // Customer wants to sell — they ask high
       const initial = Math.round(truePrice * (1.4 + customer.greed * 0.04));
       setCustomerOffer(Math.min(maxOffer, initial));
       setYourOffer(Math.round(truePrice * 0.9));
     }
   }, [customer, selectedShopItemIdx]);
 
-  // ============ EARLY RETURN AFTER HOOKS ============
   if (!customer) return null;
 
-  // No item to trade: customer wants to buy but shop is empty
   if (!tradedItem) {
     return (
       <div style={styles.overlay} onClick={() => dispatch({ type: 'SET_SELECTED_CUSTOMER', payload: null })}>
@@ -93,13 +84,17 @@ export default function TradeModal() {
               No items in your shop inventory.
             </div>
             <div style={{ color: '#8890A4', fontSize: 12, marginTop: 6 }}>
-              Move items from your player inventory to the shop first.
+              Switch to the Inventory tab and move items to your shop first.
             </div>
           </div>
         </div>
       </div>
     );
   }
+
+  const itemName = tradedItem.item_name
+    || ITEM_RELATIONS.find(r => r.item_id === tradedItem.item_id)?.item_name
+    || `Item #${tradedItem.item_id}`;
 
   const branded = BRANDED_ITEMS.find(b => b.item_id === tradedItem.item_id);
   const special = SPECIAL_EDITION_ITEMS.find(s => s.item_id === tradedItem.item_id);
@@ -111,9 +106,13 @@ export default function TradeModal() {
   const conditionColor = tradedItem.condition >= 80 ? '#52B788'
     : tradedItem.condition >= 60 ? '#F0C040'
     : tradedItem.condition >= 40 ? '#FB923C' : '#F87171';
-  const getRarityColor = r => r === 'legendary' ? '#F0C040' : r === 'rare' ? '#A78BFA' : '#8890A4';
 
   const close = () => dispatch({ type: 'SET_SELECTED_CUSTOMER', payload: null });
+
+  const removeCustomer = (msg, type = 'info') => {
+    dispatch({ type: 'REMOVE_CUSTOMER', payload: customer._id });
+    customerNotify(msg, type);
+  };
 
   const handleCounter = () => {
     const newPatience = patienceLeft - 1;
@@ -121,12 +120,11 @@ export default function TradeModal() {
     setRound(r => r + 1);
 
     if (newPatience <= 0) {
-      notify(`${customer.customer_name} lost patience and left!`, 'error');
-      dispatch({ type: 'REMOVE_CUSTOMER', payload: customer.customer_name });
+      close();
+      removeCustomer(`${customer.customer_name} lost patience and left!`, 'error');
       return;
     }
 
-    // Customer adjusts offer toward player (limited by greed/charisma)
     const charismaEffect = (player?.stats.find(s => s.stat_name === 'charisma')?.stat_level || 1) * 0.005;
     const greedFactor = Math.max(0.1, 1 - (customer.greed * 0.04) + charismaEffect);
     const movement = (yourOffer - customerOffer) * greedFactor * 0.4;
@@ -135,28 +133,26 @@ export default function TradeModal() {
   };
 
   const handleAccept = async () => {
-    // Final price = customer's current offer (player accepts what customer is offering)
     const price = customerOffer;
     const direction = customer.wantsToBuy ? 'sell' : 'buy';
-
     const updated = await processTransaction(player, tradedItem, price, direction);
 
     if (updated.error) {
-      notify(updated.error, 'error');
+      customerNotify(updated.error, 'error');
       return;
     }
 
     dispatch({ type: 'SET_PLAYER', payload: updated });
-    notify(
-      `Deal! ${direction === 'sell' ? '+' : '-'}$${price.toLocaleString()} 🤝`,
+    close();
+    removeCustomer(
+      `Deal with ${customer.customer_name}! ${direction === 'sell' ? '+' : '-'}$${price.toLocaleString()} 🤝`,
       'success'
     );
-    dispatch({ type: 'REMOVE_CUSTOMER', payload: customer.customer_name });
   };
 
   const handleReject = () => {
-    notify(`${customer.customer_name} walked away.`, 'info');
-    dispatch({ type: 'REMOVE_CUSTOMER', payload: customer.customer_name });
+    close();
+    removeCustomer(`${customer.customer_name} walked away.`, 'info');
   };
 
   const showShopPicker = customer.wantsToBuy && (player?.shopInventory.items.length || 0) > 1;
@@ -165,7 +161,6 @@ export default function TradeModal() {
     <div style={styles.overlay} onClick={close}>
       <div style={styles.modal} onClick={e => e.stopPropagation()}>
 
-        {/* Header */}
         <div style={styles.header}>
           <div style={styles.headerLeft}>
             <span style={styles.avatarBig}>🙂</span>
@@ -179,7 +174,6 @@ export default function TradeModal() {
           <button style={styles.closeBtn} onClick={close}>✕</button>
         </div>
 
-        {/* Patience bar */}
         <div style={styles.patienceRow}>
           <span style={styles.traitLabel}>Patience</span>
           <div style={styles.patienceBarTrack}>
@@ -190,41 +184,41 @@ export default function TradeModal() {
           <span style={{ ...styles.traitLabel, color: '#F87171' }}>Greed {customer.greed}/10</span>
         </div>
 
-        {/* Shop item picker if customer wants to buy and player has multiple items */}
         {showShopPicker && (
           <div style={styles.pickerRow}>
             <span style={styles.traitLabel}>Sell which item?</span>
             <div style={styles.itemTabs}>
               {player.shopInventory.items.map((it, idx) => (
                 <button
-                  key={idx}
-                  style={{
-                    ...styles.itemTab,
-                    ...(idx === selectedShopItemIdx ? styles.itemTabActive : {}),
-                  }}
+                  key={it.instance_id ?? idx}
+                  style={{ ...styles.itemTab, ...(idx === selectedShopItemIdx ? styles.itemTabActive : {}) }}
                   onClick={() => setSelectedShopItemIdx(idx)}
                 >
-                  {it.item_name}
+                  {it.item_name || ITEM_RELATIONS.find(r => r.item_id === it.item_id)?.item_name || `Item #${it.item_id}`}
+                  {' '}({it.condition}/100)
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* Item card */}
         <div style={styles.itemCard}>
           <div style={styles.itemIconBig}>👟</div>
           <div style={styles.itemDetails}>
-            <div style={styles.itemTitle}>{tradedItem.item_name}</div>
+            <div style={styles.itemTitle}>
+              {branded ? `${branded.brand_name} ` : ''}{itemName}
+              {signed ? ` (${signed.celeb_name})` : ''}
+              {qty > 1 && <span style={{ color: '#6C8EF5', fontSize: 14 }}> ×{qty}</span>}
+            </div>
             <div style={styles.badges}>
-              {branded && <Badge text={`🏷️ ${branded.brand_name} ×${branded.brand_multiplier}`}     color="#6C8EF5" />}
+              {branded && <Badge text={`🏷️ ${branded.brand_name} ×${branded.brand_multiplier}`} color="#6C8EF5" />}
               {special && <Badge text={`⭐ ${special.s_edition_name} ×${special.s_edition_multiplier}`} color="#A78BFA" />}
-              {signed  && <Badge text={`✍️ ${signed.celeb_name} ×${signed.celeb_multiplier}`}         color="#F0C040" />}
+              {signed  && <Badge text={`✍️ ${signed.celeb_name} ×${signed.celeb_multiplier}`} color="#F0C040" />}
               {tradedItem.is_replica && <Badge text="REPLICA" color="#8890A4" />}
             </div>
             <div style={styles.itemMeta}>
               <span style={{ color: conditionColor }}>◆ {conditionLabel} ({tradedItem.condition}/100)</span>
-              <span style={{ color: getRarityColor(tradedItem.rarity) }}>◆ {tradedItem.rarity}</span>
+              <span style={{ color: '#8890A4' }}>◆ {tradedItem.rarity || 'common'}</span>
             </div>
           </div>
           <div style={styles.priceCol}>
@@ -236,7 +230,6 @@ export default function TradeModal() {
           </div>
         </div>
 
-        {/* Offers */}
         <div style={styles.offersRow}>
           <div style={styles.offerBox}>
             <div style={styles.offerLabel}>
@@ -244,9 +237,7 @@ export default function TradeModal() {
             </div>
             <div style={styles.offerValue}>${customerOffer.toLocaleString()}</div>
           </div>
-
           <div style={styles.vsText}>VS</div>
-
           <div style={styles.offerBox}>
             <div style={styles.offerLabel}>
               {customer.wantsToBuy ? 'Your asking price' : 'Your offer'}
@@ -255,7 +246,6 @@ export default function TradeModal() {
           </div>
         </div>
 
-        {/* Slider */}
         <div style={styles.sliderWrapper}>
           <span style={styles.sliderMin}>${minOffer.toLocaleString()}</span>
           <input
@@ -269,7 +259,6 @@ export default function TradeModal() {
           <span style={styles.sliderMax}>${maxOffer.toLocaleString()}</span>
         </div>
 
-        {/* Buttons */}
         <div style={styles.actions}>
           <button style={{ ...styles.actionBtn, ...styles.acceptBtn }} onClick={handleAccept}>
             ✓ Accept ${customerOffer.toLocaleString()}

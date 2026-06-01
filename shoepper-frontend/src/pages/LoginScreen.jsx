@@ -11,12 +11,22 @@ export default function LoginScreen() {
   const handleStart = async () => {
     if (!nickname.trim()) { notify('Enter a nickname first!', 'error'); return; }
     setLoading(true);
-    const player = await createPlayer(nickname.trim());
-    dispatch({ type: 'SET_PLAYER', payload: player });
-    dispatch({ type: 'SET_CUSTOMERS', payload: Array.from({ length: 4 }, () =>
-      generateCustomer(player.shop.recognition)
-    )});
-    dispatch({ type: 'SET_SCREEN', payload: 'game' });
+    try {
+      const player = await createPlayer(nickname.trim());
+      if (!player?.shop) {
+        notify(player?.error || 'Server error — make sure the backend is running and the DB is seeded.', 'error');
+        setLoading(false);
+        return;
+      }
+      dispatch({ type: 'SET_PLAYER', payload: player });
+      const shopItems = player.shopInventory?.items || [];
+      dispatch({ type: 'SET_CUSTOMERS', payload: Array.from({ length: 4 }, () =>
+        generateCustomer(player.shop.recognition, shopItems)
+      )});
+      dispatch({ type: 'SET_SCREEN', payload: 'game' });
+    } catch (e) {
+      notify('Could not connect to server.', 'error');
+    }
     setLoading(false);
   };
 

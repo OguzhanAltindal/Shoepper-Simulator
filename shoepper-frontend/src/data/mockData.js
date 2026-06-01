@@ -1,8 +1,3 @@
-// ============================================================
-// MOCK DATA — Replace with API calls to Java/MySQL backend
-// All functions mirror the DB queries described in the design doc
-// ============================================================
-
 export const SHOPS = [
   { shop_name: "Basic Shop",          attraction_rate: 5.00,  rent: 1000.00, recognition: 3 },
   { shop_name: "Advance Shop",        attraction_rate: 8.50,  rent: 2500.00, recognition: 7 },
@@ -58,7 +53,6 @@ export const INITIAL_STATS = [
   { stat_name: "charisma",     stat_level: 1 },
 ];
 
-// Derived calculations (mirrors backend formulas)
 export const calcTimeModifier  = (level) => (5.0 / 100) * level;
 export const calcEffectAmount  = (level) => (5.0 / 100) * level;
 export const calcQualityMod    = (level) => Math.min(50 + level * 0.5, 100);
@@ -68,38 +62,35 @@ export const calcItemPrice = (item, itemInfo) => {
   const relation = ITEM_RELATIONS.find(r => r.item_id === item.item_id);
   if (!relation) return 0;
   let price = relation.base_price;
-
-  // condition modifier
-  price *= (itemInfo.condition / 100);
-
-  // replica reduction
+  price *= ((itemInfo.condition ?? 100) / 100);
   if (itemInfo.is_replica) price *= 0.6;
-
-  // brand multiplier
   const branded = BRANDED_ITEMS.find(b => b.item_id === item.item_id);
   if (branded) price *= branded.brand_multiplier;
-
-  // special edition multiplier
   const special = SPECIAL_EDITION_ITEMS.find(s => s.item_id === item.item_id);
   if (special) price *= special.s_edition_multiplier;
-
-  // signed multiplier
   const signed = SIGNED_ITEMS.find(s => s.item_id === item.item_id);
   if (signed) price *= signed.celeb_multiplier;
-
   return Math.round(price);
 };
 
-export const generateCustomer = (shopRecognition) => {
+export const generateCustomer = (shopRecognition, shopItems = []) => {
   const name = CUSTOMER_NAMES[Math.floor(Math.random() * CUSTOMER_NAMES.length)];
-  // Higher recognition → greedier, less patient customers
   const greed    = Math.min(10, Math.floor(Math.random() * 6) + shopRecognition);
-  const patience = Math.max(1,  Math.floor(Math.random() * 8) - Math.floor(shopRecognition / 3));
-  const wantsToBuy = Math.random() > 0.4; // 60% buy, 40% sell
+  // Minimum patience is 3 so there's always room to bargain
+  const patience = Math.max(3, Math.floor(Math.random() * 8) - Math.floor(shopRecognition / 3));
+  const wantsToBuy = Math.random() > 0.4;
   const itemRelation = ITEM_RELATIONS[Math.floor(Math.random() * ITEM_RELATIONS.length)];
-  const condition = Math.floor(Math.random() * 60) + 20; // 20-80
+  const condition = Math.floor(Math.random() * 60) + 20;
+
+  // Buying customers ask for at most 2× what's currently in the shop
+  // Selling customers offer up to half the current shop quantity
+  const shopCount = shopItems.filter(i => i.item_id === itemRelation.item_id).length;
+  const buyAmount  = Math.min(Math.max(1, shopCount * 2), 3);
+  const sellAmount = Math.max(1, Math.floor(shopCount / 2)) || 1;
+  const amount = wantsToBuy ? buyAmount : sellAmount;
 
   return {
+    _id: Math.random().toString(36).slice(2),
     customer_name: name,
     patience,
     greed,
@@ -110,8 +101,9 @@ export const generateCustomer = (shopRecognition) => {
       condition,
       is_replica: false,
       rarity: "common",
+      amount: Math.max(1, amount),
     },
     currentOffer: null,
-    mood: "neutral", // neutral, happy, angry
+    mood: "neutral",
   };
 };

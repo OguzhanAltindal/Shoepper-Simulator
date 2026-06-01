@@ -149,6 +149,21 @@ public class ShoepperServer {
             playerRepo.updateBudget(playerId, newBudget);
             if (newBudget < 0) gameOver = true;
         }
+
+        // Game over: capture the final state for the client, then erase the
+        // player's data from the database (rent could not be paid / balance went
+        // negative). No point generating customers for a deleted player.
+        if (gameOver) {
+            Player finalState = playerRepo.getPlayerById(playerId);
+            playerRepo.deletePlayer(playerId);
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("player",    finalState);
+            response.put("customers", List.of());
+            response.put("gameOver",  true);
+            sendJson(ex, 200, JsonSerializer.toJson(response));
+            return;
+        }
+
         playerRepo.updateDayWeek(playerId, newDay, newWeek, newDaysUntilRent);
 
         // Generate new customers
@@ -163,7 +178,7 @@ public class ShoepperServer {
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("player",   updated);
         response.put("customers", customers);
-        response.put("gameOver",  gameOver);
+        response.put("gameOver",  false);
         sendJson(ex, 200, JsonSerializer.toJson(response));
     }
 
@@ -230,7 +245,7 @@ public class ShoepperServer {
     private void handleRepair(HttpExchange ex, int playerId) throws IOException, SQLException {
         Map<String, String> body = readBody(ex);
         int itemId      = Integer.parseInt(body.getOrDefault("itemId", "0"));
-        int inventoryId = Integer.parseInt(body.getOrDefault("inventoryId", "1"));
+        int instanceId  = Integer.parseInt(body.getOrDefault("instanceId", "0"));
         int currentCondition = Integer.parseInt(body.getOrDefault("condition", "50"));
 
         String repairIngredient = getRepairIngredient(itemId);
@@ -249,7 +264,7 @@ public class ShoepperServer {
         int conditionGain   = (int) Math.round((100 - currentCondition) * (qualityMod / 100));
         int newCondition    = Math.min(100, currentCondition + conditionGain);
 
-        inventoryRepo.updateItemCondition(playerId, inventoryId, itemId, newCondition);
+        inventoryRepo.updateItemCondition(playerId, instanceId, newCondition);
         playerRepo.addSkillExp(playerId, "Item Repair", 25);
 
         Player updated = playerRepo.getPlayerById(playerId);
@@ -260,7 +275,7 @@ public class ShoepperServer {
         Map<String, String> body = readBody(ex);
         String direction     = body.get("direction"); // "sell" or "buy"
         int itemId           = Integer.parseInt(body.getOrDefault("itemId", "0"));
-        int itemInventoryId  = Integer.parseInt(body.getOrDefault("inventoryId", "2"));
+        int instanceId       = Integer.parseInt(body.getOrDefault("instanceId", "0"));
         double price         = Double.parseDouble(body.getOrDefault("price", "0"));
         int condition        = Integer.parseInt(body.getOrDefault("condition", "50"));
         String customerName  = body.get("customerName");
@@ -269,8 +284,8 @@ public class ShoepperServer {
         if (player == null) { sendError(ex, 404, "Player not found"); return; }
 
         if ("sell".equals(direction)) {
-            // Remove item from shop inventory, add money
-            inventoryRepo.removeItem(playerId, itemInventoryId, itemId);
+            // Remove the specific item instance from inventory, add money
+            inventoryRepo.removeItem(playerId, instanceId);
             playerRepo.updateBudget(playerId, player.getBudget() + price);
         } else if ("buy".equals(direction)) {
             if (player.getBudget() < price) {
@@ -294,17 +309,10 @@ public class ShoepperServer {
 
     private void handleMove(HttpExchange ex, int playerId) throws IOException, SQLException {
         Map<String, String> body = readBody(ex);
-        int itemId       = Integer.parseInt(body.getOrDefault("itemId", "0"));
-        int fromInvId    = Integer.parseInt(body.getOrDefault("fromInventoryId", "1"));
-        int toInvId      = Integer.parseInt(body.getOrDefault("toInventoryId", "2"));
-        int condition    = Integer.parseInt(body.getOrDefault("condition", "50"));
-        boolean isReplica = Boolean.parseBoolean(body.getOrDefault("isReplica", "false"));
-        String rarity    = body.getOrDefault("rarity", "common");
+        int instanceId = Integer.parseInt(body.getOrDefault("instanceId", "0"));
+        int toInvId    = Integer.parseInt(body.getOrDefault("toInventoryId", "2"));
 
-        ItemInfo item = new ItemInfo();
-        item.setItemId(itemId); item.setCondition(condition);
-        item.setReplica(isReplica); item.setRarity(rarity);
-        inventoryRepo.moveItem(playerId, fromInvId, toInvId, item);
+        inventoryRepo.moveItem(playerId, instanceId, toInvId);
 
         Player updated = playerRepo.getPlayerById(playerId);
         sendJson(ex, 200, JsonSerializer.toJson(updated));

@@ -7,6 +7,8 @@ import com.shoepper.models.Shop;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -30,15 +32,22 @@ public class CustomerRepository {
         clearCustomers(shopName);
 
         int count = Math.max(1, (int) Math.round(attractionRate * (0.8 + rng.nextDouble() * 0.4)));
+        // (shop_name, customer_name) is the Customer primary key, so every name in a
+        // day's batch must be unique — otherwise executeBatch() throws a duplicate-key
+        // SQLException and the whole "next day" request fails. Draw distinct names by
+        // shuffling the pool, and never request more customers than we have names for.
+        count = Math.min(count, CUSTOMER_NAMES.length);
+        List<String> namePool = new ArrayList<>(Arrays.asList(CUSTOMER_NAMES));
+        Collections.shuffle(namePool, rng);
         List<Customer> customers = new ArrayList<>();
 
         try (Connection conn = Database.getConnection()) {
             String ins = "INSERT INTO Customer (shop_name, customer_name, patience, greed) VALUES (?, ?, ?, ?)";
             try (PreparedStatement ps = conn.prepareStatement(ins)) {
                 for (int i = 0; i < count; i++) {
-                    String name = CUSTOMER_NAMES[rng.nextInt(CUSTOMER_NAMES.length)] + "_" + (i + 1);
+                    String name = namePool.get(i);
                     int greed = Math.min(10, rng.nextInt(6) + recognition);
-                    int patience = Math.max(1, rng.nextInt(8) - recognition / 3);
+                    int patience = Math.max(3, rng.nextInt(8) - recognition / 3);
                     ps.setString(1, shopName);
                     ps.setString(2, name);
                     ps.setInt(3, patience);

@@ -147,7 +147,12 @@ CREATE TABLE IF NOT EXISTS ItemRelation (
 );
 
 -- ItemInfo
+-- Each row is a single physical item instance, so the same item_id can appear
+-- many times in one inventory with different conditions/rarities. The surrogate
+-- instance_id key replaces the old (player_id, inventory_id, item_id) PK that
+-- forced identical items to merge.
 CREATE TABLE IF NOT EXISTS ItemInfo (
+    instance_id  INT AUTO_INCREMENT PRIMARY KEY,
     item_id      INT NOT NULL,
     inventory_id INT NOT NULL,
     player_id    INT NOT NULL,
@@ -155,9 +160,9 @@ CREATE TABLE IF NOT EXISTS ItemInfo (
     `condition`  INT NOT NULL DEFAULT 100,
     is_replica   BOOLEAN NOT NULL DEFAULT FALSE,
     rarity       VARCHAR(50) NOT NULL DEFAULT 'common',
-    PRIMARY KEY (player_id, inventory_id, item_id),
     FOREIGN KEY (item_id) REFERENCES ItemRelation(item_id),
     FOREIGN KEY (player_id, inventory_id) REFERENCES Inventory(player_id, inventory_id) ON DELETE CASCADE,
+    INDEX idx_iteminfo_owner (player_id, inventory_id),
     INDEX idx_iteminfo_condition (`condition`),
     INDEX idx_iteminfo_rarity (rarity),
     CHECK (`condition` BETWEEN 0 AND 100)

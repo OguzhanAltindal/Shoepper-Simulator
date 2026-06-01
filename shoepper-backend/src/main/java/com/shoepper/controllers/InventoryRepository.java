@@ -1,7 +1,6 @@
 package com.shoepper.controllers;
 
 import com.shoepper.db.Database;
-import com.shoepper.models.ItemInfo;
 
 import java.sql.*;
 
@@ -96,73 +95,52 @@ public class InventoryRepository {
     }
 
     // ─── ITEMS ───────────────────────────────────────────────
+    // Every item is a distinct instance (its own instance_id row). Items are
+    // never merged, so identical item_ids with different conditions/rarities
+    // coexist. All mutations target a single instance_id.
 
-    /** Inserts a new item into an inventory */
-    public void addItem(int playerId, int inventoryId, int itemId, int condition,
-                        boolean isReplica, String rarity) throws SQLException {
+    /** Inserts a new item instance and returns its generated instance_id */
+    public int addItem(int playerId, int inventoryId, int itemId, int condition,
+                       boolean isReplica, String rarity) throws SQLException {
         try (Connection conn = Database.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                 "INSERT INTO ItemInfo (item_id, inventory_id, player_id, amount, `condition`, is_replica, rarity) " +
-                "VALUES (?, ?, ?, 1, ?, ?, ?)")) {
+                "VALUES (?, ?, ?, 1, ?, ?, ?)", Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, itemId); ps.setInt(2, inventoryId); ps.setInt(3, playerId);
             ps.setInt(4, condition); ps.setBoolean(5, isReplica); ps.setString(6, rarity);
             ps.executeUpdate();
-        }
-    }
-
-    /** Removes an item from an inventory */
-    public void removeItem(int playerId, int inventoryId, int itemId) throws SQLException {
-        try (Connection conn = Database.getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                "DELETE FROM ItemInfo WHERE player_id = ? AND inventory_id = ? AND item_id = ?")) {
-            ps.setInt(1, playerId); ps.setInt(2, inventoryId); ps.setInt(3, itemId);
-            ps.executeUpdate();
-        }
-    }
-
-    /** Moves an item between inventories atomically */
-    public void moveItem(int playerId, int fromInventoryId, int toInventoryId,
-                         ItemInfo item) throws SQLException {
-        try (Connection conn = Database.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                removeItemConn(conn, playerId, fromInventoryId, item.getItemId());
-                addItemConn(conn, playerId, toInventoryId, item.getItemId(),
-                           item.getCondition(), item.isReplica(), item.getRarity());
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                return keys.next() ? keys.getInt(1) : -1;
             }
         }
     }
 
-    /** Updates item condition (after repair) */
-    public void updateItemCondition(int playerId, int inventoryId, int itemId, int newCondition) throws SQLException {
+    /** Removes a single item instance */
+    public void removeItem(int playerId, int instanceId) throws SQLException {
         try (Connection conn = Database.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                "UPDATE ItemInfo SET `condition` = ? WHERE player_id = ? AND inventory_id = ? AND item_id = ?")) {
-            ps.setInt(1, newCondition); ps.setInt(2, playerId);
-            ps.setInt(3, inventoryId); ps.setInt(4, itemId);
+                "DELETE FROM ItemInfo WHERE instance_id = ? AND player_id = ?")) {
+            ps.setInt(1, instanceId); ps.setInt(2, playerId);
             ps.executeUpdate();
         }
     }
 
-    private void removeItemConn(Connection conn, int playerId, int inventoryId, int itemId) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(
-            "DELETE FROM ItemInfo WHERE player_id = ? AND inventory_id = ? AND item_id = ?")) {
-            ps.setInt(1, playerId); ps.setInt(2, inventoryId); ps.setInt(3, itemId);
+    /** Moves a single item instance to another inventory, preserving its condition/rarity */
+    public void moveItem(int playerId, int instanceId, int toInventoryId) throws SQLException {
+        try (Connection conn = Database.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                "UPDATE ItemInfo SET inventory_id = ? WHERE instance_id = ? AND player_id = ?")) {
+            ps.setInt(1, toInventoryId); ps.setInt(2, instanceId); ps.setInt(3, playerId);
             ps.executeUpdate();
         }
     }
 
-    private void addItemConn(Connection conn, int playerId, int inventoryId, int itemId,
-                             int condition, boolean isReplica, String rarity) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(
-            "INSERT INTO ItemInfo (item_id, inventory_id, player_id, amount, `condition`, is_replica, rarity) " +
-            "VALUES (?, ?, ?, 1, ?, ?, ?)")) {
-            ps.setInt(1, itemId); ps.setInt(2, inventoryId); ps.setInt(3, playerId);
-            ps.setInt(4, condition); ps.setBoolean(5, isReplica); ps.setString(6, rarity);
+    /** Updates a single item instance's condition (after repair) */
+    public void updateItemCondition(int playerId, int instanceId, int newCondition) throws SQLException {
+        try (Connection conn = Database.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                "UPDATE ItemInfo SET `condition` = ? WHERE instance_id = ? AND player_id = ?")) {
+            ps.setInt(1, newCondition); ps.setInt(2, instanceId); ps.setInt(3, playerId);
             ps.executeUpdate();
         }
     }

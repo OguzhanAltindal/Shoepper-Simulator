@@ -75,19 +75,19 @@ public class ShoepperServer {
                 } else {
                     String action = parts[4];
                     switch (action) {
-                        case "nextday"   -> handleNextDay(ex, playerId);
-                        case "shop"      -> handleUpgradeShop(ex, playerId);
-                        case "gather"    -> handleGather(ex, playerId);
-                        case "craft"     -> handleCraft(ex, playerId);
-                        case "repair"    -> handleRepair(ex, playerId);
-                        case "trade"     -> handleTrade(ex, playerId);
-                        case "move"      -> handleMove(ex, playerId);
-                        case "customers" -> {
+                        case "nextday":   handleNextDay(ex, playerId); break;
+                        case "shop":      handleUpgradeShop(ex, playerId); break;
+                        case "gather":    handleGather(ex, playerId); break;
+                        case "craft":     handleCraft(ex, playerId); break;
+                        case "repair":    handleRepair(ex, playerId); break;
+                        case "trade":     handleTrade(ex, playerId); break;
+                        case "move":      handleMove(ex, playerId); break;
+                        case "customers":
                             if (parts.length >= 6 && method.equals("DELETE")) {
                                 handleRemoveCustomer(ex, playerId, parts[5]);
                             } else sendError(ex, 404, "Not found");
-                        }
-                        default          -> sendError(ex, 404, "Unknown action: " + action);
+                            break;
+                        default:          sendError(ex, 404, "Unknown action: " + action);
                     }
                 }
             } else {
@@ -288,6 +288,9 @@ public class ShoepperServer {
             inventoryRepo.removeItem(playerId, instanceId);
             playerRepo.updateBudget(playerId, player.getBudget() + price);
         } else if ("buy".equals(direction)) {
+            if (getCraftIngredient(itemId) == null) {
+                sendError(ex, 400, "Unknown itemId: " + itemId); return;
+            }
             if (player.getBudget() < price) {
                 sendError(ex, 400, "Insufficient budget"); return;
             }
@@ -345,21 +348,21 @@ public class ShoepperServer {
 
     // Item metadata lookups (mirrors ITEM_RELATIONS in frontend mockData)
     private String getCraftIngredient(int itemId) {
-        return switch (itemId) {
-            case 1, 4 -> "Craft Resource Lv.1";
-            case 2, 5 -> "Craft Resource Lv.2";
-            case 3    -> "Craft Resource Lv.3";
-            default   -> null;
-        };
+        switch (itemId) {
+            case 1: case 4: return "Craft Resource Lv.1";
+            case 2: case 5: return "Craft Resource Lv.2";
+            case 3:         return "Craft Resource Lv.3";
+            default:        return null;
+        }
     }
 
     private String getRepairIngredient(int itemId) {
-        return switch (itemId) {
-            case 1, 4 -> "Repair Resource Lv.1";
-            case 2, 5 -> "Repair Resource Lv.2";
-            case 3    -> "Repair Resource Lv.3";
-            default   -> null;
-        };
+        switch (itemId) {
+            case 1: case 4: return "Repair Resource Lv.1";
+            case 2: case 5: return "Repair Resource Lv.2";
+            case 3:         return "Repair Resource Lv.3";
+            default:        return null;
+        }
     }
 
     private int getGatherExp(String resourceName) {

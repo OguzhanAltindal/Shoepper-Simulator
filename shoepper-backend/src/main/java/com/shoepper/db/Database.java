@@ -19,14 +19,20 @@ public class Database {
     private static String password;
 
     static {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("MySQL JDBC driver not found on classpath", e);
+        }
+
         try (InputStream in = Database.class.getClassLoader().getResourceAsStream(PROPERTIES_FILE)) {
             if (in == null) {
                 throw new RuntimeException("db.properties not found in classpath");
             }
             Properties props = new Properties();
             props.load(in);
-            url      = props.getProperty("db.url");
-            user     = props.getProperty("db.user");
+            url = props.getProperty("db.url");
+            user = props.getProperty("db.user");
             password = props.getProperty("db.password");
         } catch (IOException e) {
             throw new RuntimeException("Failed to load db.properties", e);

@@ -1,0 +1,9 @@
+{
+    "java.project.referencedLibraries": [
+        "shoepper-backend/lib/**/*.jar"
+    ],
+    "java.project.sourcePaths": [
+        "shoepper-backend/src/main/java"
+    ],
+    "java.project.outputPath": "shoepper-backend/out"
+}

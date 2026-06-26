@@ -203,7 +203,7 @@ public class PlayerRepository {
 
     private List<PlayerStat> getStats(Connection conn, int playerId) throws SQLException {
         List<PlayerStat> stats = new ArrayList<>();
-        String sql = "SELECT player_id, stat_name, stat_level, effect_amnt FROM PlayerStats WHERE player_id = ?";
+        String sql = "SELECT player_id, stat_name, stat_level, effect_amnt, exp FROM PlayerStats WHERE player_id = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, playerId);
             ResultSet rs = ps.executeQuery();
@@ -212,6 +212,8 @@ public class PlayerRepository {
                 s.setPlayerId(rs.getInt("player_id"));
                 s.setStatName(rs.getString("stat_name"));
                 s.setStatLevel(rs.getInt("stat_level"));
+                s.setExp(rs.getInt("exp"));
+                s.setExpNeeded(statExpNeeded(rs.getString("stat_name")));
                 stats.add(s);
             }
         }
@@ -402,6 +404,69 @@ public class PlayerRepository {
                     "UPDATE ShopInventory SET shop_name = ? WHERE player_id = ?")) {
                 ps.setString(1, newShopName);
                 ps.setInt(2, playerId);
+                ps.executeUpdate();
+            }
+        }
+    }
+
+    // Each qualifying action grants EXP_PER_ACTION exp. The per-stat threshold is
+    // chosen so charisma levels every 3 trades and intelligence every 4 crafts.
+    private static final int EXP_PER_ACTION = 10;
+
+    /** EXP required to gain one stat level (stays constant across levels). */
+    private int statExpNeeded(String statName) {
+        switch (statName) {
+            case "charisma":     return 30; // 3 trades × 10
+            case "intelligence": return 40; // 4 crafts × 10
+            default:             return 30;
+        }
+    }
+
+    /** Grants charisma exp for a completed trade. */
+    public void addTradeExp(int playerId) throws SQLException {
+        addStatExp(playerId, "charisma", EXP_PER_ACTION);
+    }
+
+    /** Grants intelligence exp for a completed craft or repair. */
+    public void addCraftExp(int playerId) throws SQLException {
+        addStatExp(playerId, "intelligence", EXP_PER_ACTION);
+    }
+
+    /**
+     * Adds exp to a player stat and levels it up when the threshold is reached.
+     * Excess exp carries over. Stat level is capped at 100; exp stays at 0 once capped.
+     */
+    public void addStatExp(int playerId, String statName, int expGain) throws SQLException {
+        try (Connection conn = Database.getConnection()) {
+            int currentExp = 0, currentLevel = 1;
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT exp, stat_level FROM PlayerStats WHERE player_id = ? AND stat_name = ?")) {
+                ps.setInt(1, playerId);
+                ps.setString(2, statName);
+                ResultSet rs = ps.executeQuery();
+                if (rs.next()) {
+                    currentExp   = rs.getInt("exp");
+                    currentLevel = rs.getInt("stat_level");
+                } else {
+                    return; // stat row missing — nothing to do
+                }
+            }
+
+            int newExp    = currentExp + expGain;
+            int newLevel  = currentLevel;
+            int expNeeded = statExpNeeded(statName);
+            while (newExp >= expNeeded && newLevel < 100) {
+                newExp  -= expNeeded;
+                newLevel++;
+            }
+            if (newLevel >= 100) newExp = 0; // capped
+
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "UPDATE PlayerStats SET exp = ?, stat_level = ? WHERE player_id = ? AND stat_name = ?")) {
+                ps.setInt(1, newExp);
+                ps.setInt(2, newLevel);
+                ps.setInt(3, playerId);
+                ps.setString(4, statName);
                 ps.executeUpdate();
             }
         }

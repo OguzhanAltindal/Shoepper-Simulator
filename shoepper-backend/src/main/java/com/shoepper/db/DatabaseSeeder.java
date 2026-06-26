@@ -94,6 +94,14 @@ public class DatabaseSeeder {
                             "(2, 4.00,  'Orkun Kökçü')," +
                             "(3, 10.00, 'Lionel Messi')");
 
+            // Add exp column to PlayerStats if not present yet (stat leveling)
+            java.sql.DatabaseMetaData meta = conn.getMetaData();
+            java.sql.ResultSet cols = meta.getColumns(null, null, "PlayerStats", "exp");
+            if (!cols.next()) {
+                st.executeUpdate("ALTER TABLE PlayerStats ADD COLUMN exp INT NOT NULL DEFAULT 0");
+            }
+            cols.close();
+
             System.out.println("Database seeded.");
         }
     }

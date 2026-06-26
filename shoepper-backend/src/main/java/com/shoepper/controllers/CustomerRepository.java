@@ -32,10 +32,6 @@ public class CustomerRepository {
         clearCustomers(shopName);
 
         int count = Math.max(1, (int) Math.round(attractionRate * (0.8 + rng.nextDouble() * 0.4)));
-        // (shop_name, customer_name) is the Customer primary key, so every name in a
-        // day's batch must be unique — otherwise executeBatch() throws a duplicate-key
-        // SQLException and the whole "next day" request fails. Draw distinct names by
-        // shuffling the pool, and never request more customers than we have names for.
         count = Math.min(count, CUSTOMER_NAMES.length);
         List<String> namePool = new ArrayList<>(Arrays.asList(CUSTOMER_NAMES));
         Collections.shuffle(namePool, rng);

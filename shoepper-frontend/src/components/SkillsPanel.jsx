@@ -145,13 +145,16 @@ function Section({ title, children, defaultOpen = false }) {
 
 function StatRow({ stat }) {
   const effect = ((5.0 / 100) * stat.stat_level * 100).toFixed(1);
+  const expNeeded = stat.exp_needed || 1;
+  const expPct = Math.min(100, (stat.exp / expNeeded) * 100);
   return (
     <div style={styles.row}>
       <div style={styles.rowMain}>
         <div style={styles.rowName}>{stat.stat_name}</div>
         <div style={styles.expBar}>
-          <div style={{ width: `${Math.min(stat.stat_level, 100)}%`, background: '#6C8EF5', height: '100%', borderRadius: 4 }} />
+          <div style={{ width: `${expPct}%`, background: '#6C8EF5', height: '100%', borderRadius: 4, transition: 'width 0.4s' }} />
         </div>
+        <div style={styles.expText}>{stat.exp}/{expNeeded} exp</div>
       </div>
       <div style={styles.rowRight}>
         <div style={styles.level}>Lv.{stat.stat_level}</div>

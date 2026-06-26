@@ -1,4 +1,3 @@
-
 USE shoepper_simulator_db;
 
 -- Shops

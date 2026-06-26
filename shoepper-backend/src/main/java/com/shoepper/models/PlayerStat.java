@@ -5,6 +5,8 @@ public class PlayerStat {
     private String statName;
     private int statLevel;
     private double effectAmnt;
+    private int exp;
+    private int expNeeded;
 
     public PlayerStat() {}
     public PlayerStat(int playerId, String statName, int statLevel) {
@@ -21,4 +23,8 @@ public class PlayerStat {
     public int getStatLevel()           { return statLevel; }
     public void setStatLevel(int v)     { this.statLevel = v; this.effectAmnt = (5.0/100)*v; }
     public double getEffectAmnt()       { return effectAmnt; }
+    public int getExp()                 { return exp; }
+    public void setExp(int v)           { this.exp = v; }
+    public int getExpNeeded()           { return expNeeded; }
+    public void setExpNeeded(int v)     { this.expNeeded = v; }
 }

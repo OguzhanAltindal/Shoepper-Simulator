@@ -106,6 +106,8 @@ export function normalizePlayer(p) {
       stat_name: s.statName,
       stat_level: s.statLevel,
       effect_amnt: s.effectAmnt,
+      exp: s.exp,
+      exp_needed: s.expNeeded,
     })),
     skills: (p.skills || []).map(s => ({
       skill_name: s.skillName,

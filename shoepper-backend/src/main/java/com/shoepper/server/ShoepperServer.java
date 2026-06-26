@@ -237,6 +237,7 @@ public class ShoepperServer {
 
         inventoryRepo.addItem(playerId, 1, itemId, condition, true, "common");
         playerRepo.addSkillExp(playerId, "Item Crafting", 30);
+        playerRepo.addCraftExp(playerId);
 
         Player updated = playerRepo.getPlayerById(playerId);
         sendJson(ex, 200, JsonSerializer.toJson(updated));
@@ -266,6 +267,7 @@ public class ShoepperServer {
 
         inventoryRepo.updateItemCondition(playerId, instanceId, newCondition);
         playerRepo.addSkillExp(playerId, "Item Repair", 25);
+        playerRepo.addCraftExp(playerId);
 
         Player updated = playerRepo.getPlayerById(playerId);
         sendJson(ex, 200, JsonSerializer.toJson(updated));
@@ -300,6 +302,8 @@ public class ShoepperServer {
             inventoryRepo.addItem(playerId, 1, itemId, condition, false, "common");
             playerRepo.updateBudget(playerId, player.getBudget() - price);
         }
+
+        playerRepo.addTradeExp(playerId);
 
         // Remove customer
         if (customerName != null && player.getShop() != null) {
